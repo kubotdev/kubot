@@ -16,6 +16,7 @@ func DefaultRules() []Rule {
 		PodNearLimitRule{},
 		DeploymentResourceRiskRule{},
 		DeploymentStalledRule{},
+		DeploymentRolloutRecentRule{},
 		ReplicaSetLeftoverRule{},
 		PVCPendingRule{},
 		PodMountFailureRule{},

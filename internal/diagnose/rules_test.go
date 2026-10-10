@@ -2,6 +2,8 @@ package diagnose
 
 import (
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -713,5 +715,93 @@ func TestFilterCronJobPullsJobAndPods(t *testing.T) {
 		if !names[want] {
 			t.Fatalf("missing %s in %+v", want, names)
 		}
+	}
+}
+
+func rolloutSnap(now metav1.Time, sets ...appsv1.ReplicaSet) *k8s.Snapshot {
+	d := appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "checkout-api", Namespace: "production"}}
+	return &k8s.Snapshot{Deployments: []appsv1.Deployment{d}, ReplicaSets: sets}
+}
+
+func rolloutRS(name, image string, revision int, at metav1.Time) appsv1.ReplicaSet {
+	rs := appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name, Namespace: "production",
+			CreationTimestamp: at,
+			Annotations:       map[string]string{"deployment.kubernetes.io/revision": strconv.Itoa(revision)},
+			OwnerReferences:   []metav1.OwnerReference{{Kind: "Deployment", Name: "checkout-api"}},
+		},
+	}
+	rs.Spec.Template.Spec.Containers = []corev1.Container{{Name: "api", Image: image}}
+	return rs
+}
+
+func TestRolloutRecent_imageChange(t *testing.T) {
+	now := metav1.Now()
+	s := rolloutSnap(now,
+		rolloutRS("checkout-api-7d8f9c", "api:v2.8.0", 11, metav1.NewTime(now.Add(-2*time.Hour))),
+		rolloutRS("checkout-api-9a1b2c", "api:v2.8.1", 12, metav1.NewTime(now.Add(-9*time.Minute))),
+	)
+	got := (DeploymentRolloutRecentRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "deployment_rollout_recent" || got[0].Severity != "note" {
+		t.Fatalf("expected recent-rollout note, got %+v", got)
+	}
+	if !strings.Contains(got[0].Message, "v2.8.0") || !strings.Contains(got[0].Message, "v2.8.1") || !strings.Contains(got[0].Message, "→") {
+		t.Fatalf("message must show the image change, got %q", got[0].Message)
+	}
+	if got[0].Evidence["previous_images"] == nil || got[0].Evidence["revision"] != 12 {
+		t.Fatalf("evidence must carry previous images and revision, got %+v", got[0].Evidence)
+	}
+}
+
+func TestRolloutRecent_oldRolloutSilent(t *testing.T) {
+	now := metav1.Now()
+	s := rolloutSnap(now,
+		rolloutRS("checkout-api-7d8f9c", "api:v2.8.0", 11, metav1.NewTime(now.Add(-3*time.Hour))),
+		rolloutRS("checkout-api-9a1b2c", "api:v2.8.1", 12, metav1.NewTime(now.Add(-2*time.Hour))),
+	)
+	if got := (DeploymentRolloutRecentRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("old rollouts are history, got %+v", got)
+	}
+}
+
+func TestRolloutRecent_firstRollout(t *testing.T) {
+	now := metav1.Now()
+	s := rolloutSnap(now,
+		rolloutRS("checkout-api-7d8f9c", "api:v2.8.0", 1, metav1.NewTime(now.Add(-5*time.Minute))),
+	)
+	got := (DeploymentRolloutRecentRule{}).Run(s)
+	if len(got) != 1 || !strings.Contains(got[0].Message, "first rollout") {
+		t.Fatalf("expected first-rollout note, got %+v", got)
+	}
+}
+
+func TestRolloutRecent_sameImageRedeploy(t *testing.T) {
+	now := metav1.Now()
+	s := rolloutSnap(now,
+		rolloutRS("checkout-api-7d8f9c", "api:v2.8.0", 11, metav1.NewTime(now.Add(-2*time.Hour))),
+		rolloutRS("checkout-api-9a1b2c", "api:v2.8.0", 12, metav1.NewTime(now.Add(-9*time.Minute))),
+	)
+	got := (DeploymentRolloutRecentRule{}).Run(s)
+	if len(got) != 1 || strings.Contains(got[0].Message, "→") {
+		t.Fatalf("same-image redeploy must not claim a change, got %+v", got)
+	}
+}
+
+func TestRolloutRecent_filteredByWorkload(t *testing.T) {
+	now := metav1.Now()
+	s := rolloutSnap(now,
+		rolloutRS("checkout-api-9a1b2c", "api:v2.8.1", 12, metav1.NewTime(now.Add(-9*time.Minute))),
+	)
+	all := NewEngine().Run(s)
+	got := FilterByWorkload(all, "checkout-api", "production", s)
+	found := false
+	for _, f := range got {
+		if f.Reason == "deployment_rollout_recent" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("why must include the rollout note, got %+v", all)
 	}
 }

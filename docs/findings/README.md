@@ -19,6 +19,7 @@ it. Finding ids are stable: `kubot inspect --json` reports them in `reason`.
 | [pod_near_limit](pod_near_limit.md) | warning | usage at 80%+ of memory limit |
 | [deployment_resource_risk](deployment_resource_risk.md) | note | half+ pods limitless |
 | [deployment_rollout_stalled](deployment_rollout_stalled.md) | warning | rollout past its deadline |
+| [deployment_rollout_recent](deployment_rollout_recent.md) | note | rolled out within the last hour |
 | [replicaset_leftover](replicaset_leftover.md) | note | old ReplicaSets still running |
 | [pvc_pending](pvc_pending.md) | warning | claim unbound, pods blocked |
 | [pod_mount_failure](pod_mount_failure.md) | warning | kubelet can't mount a volume |
