@@ -55,6 +55,7 @@ func main() {
 	root.AddCommand(newEventsCmd())
 	root.AddCommand(newResourcesCmd())
 	root.AddCommand(newNetworkingCmd())
+	root.AddCommand(newLogsCmd())
 	root.AddCommand(newCheckCmd())
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newAskCmd())
