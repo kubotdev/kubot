@@ -147,6 +147,7 @@ Global flags (every command): `--kubeconfig`, `--context`, `-n/--namespace`
 | `resources` | per-container requests/limits/usage table plus resource findings |
 | `networking` | service, probe, and ingress findings |
 | `logs <workload\|pod>` | recent container logs per pod (`--previous`, `--tail`, `--container`) |
+| `diff [--since 24h]` | what changed between two stored runs (offline) |
 | `check` | CI gate: one line per issue plus the exit code |
 | `ask "…"` · `explain [workload]` | a plain-language AI reading of the same deterministic findings |
 | `mcp` | serve the findings to an AI agent over MCP |
@@ -367,8 +368,10 @@ Credential-shaped keys are refused outright. Full contract in
 
 ## Roadmap and non-goals
 
-- **Baselines/diff ("what changed")** is the biggest planned feature —
-  correctly deferred until the point-in-time diagnosis is solid.
+- **History/diff ("what changed")** compares stored per-run digests —
+  resolved, new, and image changes between any two runs (see
+  [`docs/history.md`](docs/history.md)). No daemon: it only remembers runs
+  you actually made.
 - **HPA/PDB awareness and Jobs-adjacent depth** are the named diagnostic
   holes; security checks (root, privileged, seccomp) are untouched.
 - **AI is optional and explain-only.** Findings are always computed

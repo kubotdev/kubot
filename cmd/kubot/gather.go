@@ -6,6 +6,7 @@ import (
 
 	"github.com/kubotdev/kubot/internal/config"
 	"github.com/kubotdev/kubot/internal/diagnose"
+	"github.com/kubotdev/kubot/internal/history"
 	"github.com/kubotdev/kubot/internal/k8s"
 	"github.com/kubotdev/kubot/internal/model"
 )
@@ -47,12 +48,19 @@ func gatherScoped(ctx context.Context, namespace string) (model.Report, *k8s.Sna
 			}
 		}
 	}
-	return model.Report{
+	rep := model.Report{
 		SchemaVersion: model.SchemaVersion,
 		Cluster:       model.ClusterInfo{Context: snap.Context, Namespace: namespace},
 		Status:        model.OverallStatus(findings),
 		Issues:        findings,
 		Checked:       diagnose.CheckedSubsystems(),
 		Degraded:      snap.Degraded,
-	}, snap, nil
+	}
+	// Every run leaves a digest for `kubot diff`
+	if dir, err := history.Dir(); err != nil {
+		rep.Degraded = append(rep.Degraded, "history not saved ("+err.Error()+")")
+	} else if err := history.Save(dir, history.Fingerprint(snap.Context), history.FromSnapshot(snap, rep, snap.Context, namespace)); err != nil {
+		rep.Degraded = append(rep.Degraded, "history not saved ("+err.Error()+")")
+	}
+	return rep, snap, nil
 }

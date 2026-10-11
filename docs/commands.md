@@ -12,6 +12,7 @@ Global flags (every command): `--kubeconfig`, `--context`, `-n/--namespace`
 | `resources` | per-container requests/limits/usage table plus resource findings |
 | `networking` | service, probe, and ingress findings |
 | `logs <workload\|pod>` | recent container logs per pod (`--previous`, `--tail`, `--container`) |
+| `diff [--since 24h]` | what changed between two stored runs (offline; see [History](history.md)) |
 | `check` | CI gate: one line per issue plus the exit code |
 | `ask "<question>"` | plain-language answer grounded in the findings (see [AI layer](ai.md)) |
 | `explain [workload]` | the report plus an AI reading of it |
