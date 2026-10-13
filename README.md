@@ -180,7 +180,7 @@ go install github.com/kubotdev/kubot/cmd/kubot@latest
 The script downloads the release archive for your OS/arch from GitHub
 Releases (Linux/macOS `.tar.gz`, Windows `.zip`), verifies its sha256
 checksum always, and the cosign signature (keyless, GitHub Actions OIDC)
-when `cosign` is on PATH. Pin a version with `KUBOT_VERSION=v0.3.0`,
+when `cosign` is on PATH. Pin a version with `KUBOT_VERSION=v0.4.0`,
 change the destination with `KUBOT_INSTALL_DIR`. To re-install or upgrade,
 re-run the same command. `KUBOT_REQUIRE_SIGNATURE=1` makes the signature
 mandatory:
