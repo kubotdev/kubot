@@ -31,6 +31,8 @@ func TestCollect_fakeClient(t *testing.T) {
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "shop-tls", Namespace: "default"}},
 		&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "backup", Namespace: "default"}},
 		&batchv1.CronJob{ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app-cfg", Namespace: "default"}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "app", Namespace: "default"}},
 	)
 	snap, err := Collect(context.Background(), cs, "", 10*time.Second)
 	if err != nil {
@@ -47,6 +49,9 @@ func TestCollect_fakeClient(t *testing.T) {
 	}
 	if len(snap.Jobs) != 1 || len(snap.CronJobs) != 1 {
 		t.Fatalf("missing batch: jobs=%d crons=%d", len(snap.Jobs), len(snap.CronJobs))
+	}
+	if len(snap.ConfigMaps) != 1 || len(snap.ServiceAccounts) != 1 {
+		t.Fatalf("missing refs: configmaps=%d sas=%d", len(snap.ConfigMaps), len(snap.ServiceAccounts))
 	}
 	if len(snap.Degraded) != 0 {
 		t.Fatalf("unexpected degradations: %v", snap.Degraded)

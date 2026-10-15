@@ -1053,6 +1053,132 @@ func TestCronJobSuspended(t *testing.T) {
 	}
 }
 
+func unusedSnap() *k8s.Snapshot {
+	usedCM := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "app-cfg", Namespace: "default"}}
+	staleCM := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "old-cfg", Namespace: "default"}}
+	usedSecret := corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "app-creds", Namespace: "default"}}
+	staleSecret := corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "rotated-creds", Namespace: "default"}}
+	helmSecret := corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "sh.helm.release.v1.shop.v3", Namespace: "default"},
+		Type:       "helm.sh/release.v1",
+	}
+	usedPVC := corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "data", Namespace: "default"}}
+	stalePVC := corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "orphan", Namespace: "default"}}
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "web-0", Namespace: "default"},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{
+			Name: "app",
+			EnvFrom: []corev1.EnvFromSource{
+				{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-cfg"}}},
+				{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-creds"}}},
+			},
+		}},
+		}}
+	pod.Spec.Volumes = []corev1.Volume{{
+		Name: "data",
+		VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
+		},
+	}}
+	return &k8s.Snapshot{
+		Pods:       []corev1.Pod{pod},
+		ConfigMaps: []corev1.ConfigMap{usedCM, staleCM},
+		Secrets:    []corev1.Secret{usedSecret, staleSecret, helmSecret},
+		PVCs:       []corev1.PersistentVolumeClaim{usedPVC, stalePVC},
+	}
+}
+
+func TestConfigMapUnused(t *testing.T) {
+	got := (ConfigMapUnusedRule{}).Run(unusedSnap())
+	if len(got) != 1 || got[0].Resource != "configmap/old-cfg" || got[0].Severity != "note" {
+		t.Fatalf("want only old-cfg, got %+v", got)
+	}
+}
+
+func TestSecretUnused(t *testing.T) {
+	got := (SecretUnusedRule{}).Run(unusedSnap())
+	if len(got) != 1 || got[0].Resource != "secret/rotated-creds" {
+		t.Fatalf("want only rotated-creds (helm storage excluded), got %+v", got)
+	}
+}
+
+func TestPVCUnused(t *testing.T) {
+	got := (PVCUnusedRule{}).Run(unusedSnap())
+	if len(got) != 1 || got[0].Resource != "persistentvolumeclaim/orphan" {
+		t.Fatalf("want only orphan, got %+v", got)
+	}
+}
+
+func TestUnused_templateRefsCount(t *testing.T) {
+	// A CronJob template referencing everything: no live pod needed.
+	s := unusedSnap()
+	s.Pods = nil
+	tpl := corev1.PodSpec{
+		Volumes: []corev1.Volume{{
+			Name: "data",
+			VolumeSource: corev1.VolumeSource{
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "data"},
+			},
+		}},
+		Containers: []corev1.Container{{
+			Name: "app",
+			EnvFrom: []corev1.EnvFromSource{
+				{ConfigMapRef: &corev1.ConfigMapEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-cfg"}}},
+				{SecretRef: &corev1.SecretEnvSource{LocalObjectReference: corev1.LocalObjectReference{Name: "app-creds"}}},
+			},
+		}},
+	}
+	s.CronJobs = []batchv1.CronJob{{
+		ObjectMeta: metav1.ObjectMeta{Name: "weekly", Namespace: "default"},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 0 * * 0",
+			JobTemplate: batchv1.JobTemplateSpec{
+				Spec: batchv1.JobSpec{Template: corev1.PodTemplateSpec{Spec: tpl}},
+			},
+		},
+	}}
+	if got := (PVCUnusedRule{}).Run(s); len(got) != 1 || got[0].Resource != "persistentvolumeclaim/orphan" {
+		t.Fatalf("template refs must count, got %+v", got)
+	}
+	if got := (ConfigMapUnusedRule{}).Run(s); len(got) != 1 {
+		t.Fatalf("template refs must count, got %+v", got)
+	}
+	if got := (SecretUnusedRule{}).Run(s); len(got) != 1 {
+		t.Fatalf("template refs must count, got %+v", got)
+	}
+}
+
+func TestUnused_ingressTLSCounts(t *testing.T) {
+	s := unusedSnap()
+	s.Secrets = append(s.Secrets, corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "shop-tls", Namespace: "default"}})
+	s.Ingresses = []networkingv1.Ingress{{
+		ObjectMeta: metav1.ObjectMeta{Name: "shop", Namespace: "default"},
+		Spec:       networkingv1.IngressSpec{TLS: []networkingv1.IngressTLS{{SecretName: "shop-tls"}}},
+	}}
+	for _, f := range (SecretUnusedRule{}).Run(s) {
+		if f.Resource == "secret/shop-tls" {
+			t.Fatalf("ingress TLS secret must count as used: %+v", f)
+		}
+	}
+}
+
+func TestUnused_kubeSystemSilent(t *testing.T) {
+	s := &k8s.Snapshot{
+		ConfigMaps: []corev1.ConfigMap{{ObjectMeta: metav1.ObjectMeta{Name: "sys", Namespace: "kube-system"}}},
+		Secrets:    []corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "sys", Namespace: "kube-system"}}},
+		PVCs:       []corev1.PersistentVolumeClaim{{ObjectMeta: metav1.ObjectMeta{Name: "sys", Namespace: "kube-system"}}},
+	}
+	if got := (ConfigMapUnusedRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("kube-system stays silent, got %+v", got)
+	}
+	if got := (SecretUnusedRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("kube-system stays silent, got %+v", got)
+	}
+	if got := (PVCUnusedRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("kube-system stays silent, got %+v", got)
+	}
+}
+
 func notReadyNode(name string, status corev1.ConditionStatus, ago time.Duration) corev1.Node {
 	return corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: name},

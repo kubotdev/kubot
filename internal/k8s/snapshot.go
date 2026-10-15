@@ -11,25 +11,27 @@ import (
 )
 
 type Snapshot struct {
-	Context        string
-	Pods           []corev1.Pod
-	Deployments    []appsv1.Deployment
-	ReplicaSets    []appsv1.ReplicaSet
-	StatefulSets   []appsv1.StatefulSet
-	DaemonSets     []appsv1.DaemonSet
-	Services       []corev1.Service
-	EndpointSlices []discoveryv1.EndpointSlice
-	Ingresses      []networkingv1.Ingress
-	IngressClasses []networkingv1.IngressClass
-	Jobs           []batchv1.Job
-	CronJobs       []batchv1.CronJob
-	Secrets        []corev1.Secret
-	Events         []corev1.Event
-	Nodes          []corev1.Node
-	Usage          []ContainerUsage
-	PVCs           []corev1.PersistentVolumeClaim
-	HPAs           []autoscalingv1.HorizontalPodAutoscaler
-	PDBs           []policyv1.PodDisruptionBudget
+	Context         string
+	Pods            []corev1.Pod
+	Deployments     []appsv1.Deployment
+	ReplicaSets     []appsv1.ReplicaSet
+	StatefulSets    []appsv1.StatefulSet
+	DaemonSets      []appsv1.DaemonSet
+	Services        []corev1.Service
+	EndpointSlices  []discoveryv1.EndpointSlice
+	Ingresses       []networkingv1.Ingress
+	IngressClasses  []networkingv1.IngressClass
+	Jobs            []batchv1.Job
+	CronJobs        []batchv1.CronJob
+	Secrets         []corev1.Secret
+	Events          []corev1.Event
+	Nodes           []corev1.Node
+	Usage           []ContainerUsage
+	PVCs            []corev1.PersistentVolumeClaim
+	HPAs            []autoscalingv1.HorizontalPodAutoscaler
+	PDBs            []policyv1.PodDisruptionBudget
+	ConfigMaps      []corev1.ConfigMap
+	ServiceAccounts []corev1.ServiceAccount
 
 	// Collectors that failed without aborting the run (e.g. events RBAC denied).
 	Degraded []string

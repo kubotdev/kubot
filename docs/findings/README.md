@@ -25,6 +25,9 @@ it. Finding ids are stable: `kubot inspect --json` reports them in `reason`.
 | [pod_mount_failure](pod_mount_failure.md) | warning | kubelet can't mount a volume |
 | [node_pressure](node_pressure.md) | warning | memory/disk/PID pressure |
 | [node_notready](node_notready.md) | critical | node stopped reporting Ready |
+| [pvc_unused](pvc_unused.md) | note | PVC mounted by nothing |
+| [configmap_unused](configmap_unused.md) | note | ConfigMap referenced by nothing |
+| [secret_unused](secret_unused.md) | note | Secret referenced by nothing |
 | [ingress_no_backends](ingress_no_backends.md) | warning | route to missing/unready service |
 | [ingress_unknown_class](ingress_unknown_class.md) | warning | class nobody implements |
 | [ingress_tls_secret_missing](ingress_tls_secret_missing.md) | warning | TLS secret doesn't exist |

@@ -49,6 +49,8 @@ func Collect(ctx context.Context, cs kubernetes.Interface, namespace string, tim
 	collect("nodes", func() error { return collectNodes(ctx, listOpts, snap, cs, namespace) })
 	collect("hpas", func() error { return collectHPAs(ctx, listOpts, snap, cs, namespace) })
 	collect("pdbs", func() error { return collectPDBs(ctx, listOpts, snap, cs, namespace) })
+	collect("configmaps", func() error { return collectConfigMaps(ctx, listOpts, snap, cs, namespace) })
+	collect("serviceaccounts", func() error { return collectServiceAccounts(ctx, listOpts, snap, cs, namespace) })
 
 	if ctx.Err() == context.DeadlineExceeded {
 		snap.Degraded = append(snap.Degraded, "collection timed out; results partial")
@@ -210,5 +212,23 @@ func collectPDBs(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, c
 		return err
 	}
 	snap.PDBs = res.Items
+	return nil
+}
+
+func collectConfigMaps(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, cs kubernetes.Interface, ns string) error {
+	res, err := cs.CoreV1().ConfigMaps(ns).List(ctx, opts)
+	if err != nil {
+		return err
+	}
+	snap.ConfigMaps = res.Items
+	return nil
+}
+
+func collectServiceAccounts(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, cs kubernetes.Interface, ns string) error {
+	res, err := cs.CoreV1().ServiceAccounts(ns).List(ctx, opts)
+	if err != nil {
+		return err
+	}
+	snap.ServiceAccounts = res.Items
 	return nil
 }

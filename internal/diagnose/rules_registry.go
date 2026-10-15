@@ -34,6 +34,9 @@ func DefaultRules() []Rule {
 		HPANoopRule{},
 		PDBBlockingRule{},
 		PDBNoMatchRule{},
+		PVCUnusedRule{},
+		ConfigMapUnusedRule{},
+		SecretUnusedRule{},
 	}
 }
 
