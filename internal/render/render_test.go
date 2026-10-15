@@ -91,11 +91,11 @@ func TestPrintText_full(t *testing.T) {
 }
 
 func TestHealthScore(t *testing.T) {
-	if got := healthScore(nil); got != 100 {
+	if got := HealthScore(nil); got != 100 {
 		t.Errorf("empty = %d, want 100", got)
 	}
 	fs := []model.Finding{{Severity: "critical"}, {Severity: "warning"}, {Severity: "note"}}
-	if got := healthScore(fs); got != 86 {
+	if got := HealthScore(fs); got != 86 {
 		t.Errorf("got %d, want 86", got)
 	}
 }

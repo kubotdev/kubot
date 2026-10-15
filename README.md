@@ -148,6 +148,7 @@ Global flags (every command): `--kubeconfig`, `--context`, `-n/--namespace`
 | `networking` | service, probe, and ingress findings |
 | `logs <workload\|pod>` | recent container logs per pod (`--previous`, `--tail`, `--container`) |
 | `diff [--since 24h]` | what changed between two stored runs (offline) |
+| `report` | full inspection as a self-contained HTML page |
 | `check` | CI gate: one line per issue plus the exit code |
 | `ask "…"` · `explain [workload]` | a plain-language AI reading of the same deterministic findings |
 | `mcp` | serve the findings to an AI agent over MCP |
@@ -226,6 +227,7 @@ kubot resources                # usage table + resource problems
 kubot networking               # service + probe + ingress problems
 kubot check --fail-on=critical # CI gate, exits non-zero when sick
 kubot logs billing-worker     # recent logs per pod (--previous for the last crash)
+kubot report -o report.html  # the full inspection as one HTML page
 kubot ask "why is it slow?"    # AI answer grounded in the findings
   --yes                  skip the data-disclosure confirmation prompt
 kubot explain [workload]       # report plus an AI reading of it

@@ -33,11 +33,12 @@ type Digest struct {
 }
 
 type FindingDigest struct {
-	Severity  string `json:"severity"`
-	Reason    string `json:"reason"`
-	Resource  string `json:"resource"`
-	Namespace string `json:"namespace"`
-	Message   string `json:"message"`
+	Severity   string `json:"severity"`
+	Reason     string `json:"reason"`
+	Resource   string `json:"resource"`
+	Namespace  string `json:"namespace"`
+	Message    string `json:"message"`
+	Suppressed bool   `json:"suppressed,omitempty"`
 }
 
 type WorkloadDigest struct {
@@ -63,6 +64,7 @@ func FromSnapshot(snap *k8s.Snapshot, rep model.Report, contextName, namespace s
 		d.Findings = append(d.Findings, FindingDigest{
 			Severity: f.Severity, Reason: f.Reason,
 			Resource: f.Resource, Namespace: f.Namespace, Message: f.Message,
+			Suppressed: f.Suppressed,
 		})
 	}
 	byDeploy := map[string][]appsv1.ReplicaSet{}

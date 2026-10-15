@@ -89,7 +89,7 @@ func PrintText(w io.Writer, rep model.Report, color bool, opt Options) error {
 		fmt.Fprintln(w)
 	}
 
-	score := healthScore(rep.Issues)
+	score := HealthScore(rep.Issues)
 	paint := st.good
 	switch {
 	case score < 70:
@@ -162,7 +162,7 @@ func filterSev(fs []model.Finding, sev string) []model.Finding {
 	return out
 }
 
-func healthScore(fs []model.Finding) int {
+func HealthScore(fs []model.Finding) int {
 	penalty := 0
 	for _, f := range fs {
 		if f.Suppressed {
