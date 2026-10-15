@@ -30,7 +30,7 @@ that expired before the run began.
 
 ## When to ignore
 
-CronJobs paused by suspension (kubot doesn't flag `suspend: true` at all)
+CronJobs paused by suspension (flagged separately as `cronjob_suspended`)
 or schedules under maintenance:
 
 ```toml

@@ -2,10 +2,12 @@ package k8s
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 )
 
 type Snapshot struct {
@@ -26,6 +28,8 @@ type Snapshot struct {
 	Nodes          []corev1.Node
 	Usage          []ContainerUsage
 	PVCs           []corev1.PersistentVolumeClaim
+	HPAs           []autoscalingv1.HorizontalPodAutoscaler
+	PDBs           []policyv1.PodDisruptionBudget
 
 	// Collectors that failed without aborting the run (e.g. events RBAC denied).
 	Degraded []string

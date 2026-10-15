@@ -328,7 +328,7 @@ to the tool.
 
 ## What it checks
 
-Twenty-four checks across pods, workloads, services, storage, nodes,
+Thirty-one checks across pods, workloads, services, storage, nodes,
 ingress, and jobs — CrashLoopBackOff (incl. backoff window), OOMKilled,
 image pulls, pending pods (with scheduler context), failing probes
 (sustained only — Ready pods stay silent), unavailable
@@ -337,7 +337,9 @@ or suspiciously low (under 32Mi) requests/limits, 80%+ usage (needs
 metrics-server), deployment risk aggregates, stalled rollouts, recent
 rollouts (last hour, with image change), leftover
 ReplicaSets, pending PVCs, mount failures, node pressure, three ingress
-rules, failed Jobs, and failing CronJobs.
+rules, failed Jobs, failing or suspended CronJobs, privileged or host-namespace pods,
+workloads running entirely as root, and maxed-out, dead, or blocking
+HPAs and PDBs.
 
 Every finding has a reference page under [`docs/findings/`](docs/findings/README.md) —
 what it observed, how to verify it yourself with read-only kubectl, and a

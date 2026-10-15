@@ -26,6 +26,13 @@ func DefaultRules() []Rule {
 		IngressTLSSecretRule{},
 		JobFailedRule{},
 		CronJobFailingRule{},
+		CronJobSuspendedRule{},
+		PodHostAccessRule{},
+		WorkloadRootRule{},
+		HPAAtMaxRule{},
+		HPANoopRule{},
+		PDBBlockingRule{},
+		PDBNoMatchRule{},
 	}
 }
 
