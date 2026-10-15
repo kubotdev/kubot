@@ -9,7 +9,8 @@ Severity: warning
 
 Pod in phase `Pending` with no `nodeName` (already-scheduled pods are
 another rule's problem), plus the `FailedScheduling` event message, the
-pod's CPU/memory requests, nodeSelector, and cluster taint/cordon context.
+pod's CPU/memory requests, nodeSelector, cluster taint/cordon context,
+and the named pressured and NotReady nodes behind the failure.
 
 ## Why it matters
 

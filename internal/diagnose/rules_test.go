@@ -1052,3 +1052,70 @@ func TestCronJobSuspended(t *testing.T) {
 		t.Fatalf("running schedules stay silent, got %+v", got)
 	}
 }
+
+func notReadyNode(name string, status corev1.ConditionStatus, ago time.Duration) corev1.Node {
+	return corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{{
+			Type:               corev1.NodeReady,
+			Status:             status,
+			Reason:             "KubeletNotReady",
+			Message:            "kubelet is not ready",
+			LastTransitionTime: metav1.NewTime(time.Now().Add(-ago)),
+		}}},
+	}
+}
+
+func TestNodeNotReady_fires(t *testing.T) {
+	s := &k8s.Snapshot{Nodes: []corev1.Node{notReadyNode("n1", corev1.ConditionFalse, 10*time.Minute)}}
+	got := (NodeNotReadyRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "node_notready" || got[0].Severity != "critical" {
+		t.Fatalf("expected notready critical, got %+v", got)
+	}
+	if got[0].Resource != "node/n1" {
+		t.Fatalf("resource must name the node, got %q", got[0].Resource)
+	}
+}
+
+func TestNodeNotReady_graceAndHealthy(t *testing.T) {
+	flapping := &k8s.Snapshot{Nodes: []corev1.Node{notReadyNode("n1", corev1.ConditionFalse, time.Minute)}}
+	if got := (NodeNotReadyRule{}).Run(flapping); len(got) != 0 {
+		t.Fatalf("brief flaps stay silent, got %+v", got)
+	}
+	healthy := &k8s.Snapshot{Nodes: []corev1.Node{notReadyNode("n1", corev1.ConditionTrue, time.Hour)}}
+	if got := (NodeNotReadyRule{}).Run(healthy); len(got) != 0 {
+		t.Fatalf("ready nodes stay silent, got %+v", got)
+	}
+}
+
+func pendingPod(ns, name string) corev1.Pod {
+	return corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Status:     corev1.PodStatus{Phase: corev1.PodPending},
+		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}
+}
+
+func TestPodPending_nodeHealthContext(t *testing.T) {
+	pressured := corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "n1"},
+		Status: corev1.NodeStatus{Conditions: []corev1.NodeCondition{
+			{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			{Type: corev1.NodeMemoryPressure, Status: corev1.ConditionTrue},
+		}},
+	}
+	s := &k8s.Snapshot{
+		Pods:  []corev1.Pod{pendingPod("default", "hungry")},
+		Nodes: []corev1.Node{pressured, notReadyNode("n2", corev1.ConditionFalse, time.Hour)},
+	}
+	got := (PodPendingRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "pod_pending" {
+		t.Fatalf("expected pending finding, got %+v", got)
+	}
+	if _, ok := got[0].Evidence["pressured_nodes"]; !ok {
+		t.Fatalf("must name pressured nodes, got %+v", got[0].Evidence)
+	}
+	if _, ok := got[0].Evidence["notready_nodes"]; !ok {
+		t.Fatalf("must name notready nodes, got %+v", got[0].Evidence)
+	}
+}

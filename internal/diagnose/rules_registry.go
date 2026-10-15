@@ -21,6 +21,7 @@ func DefaultRules() []Rule {
 		PVCPendingRule{},
 		PodMountFailureRule{},
 		NodePressureRule{},
+		NodeNotReadyRule{},
 		IngressNoBackendsRule{},
 		IngressClassRule{},
 		IngressTLSSecretRule{},

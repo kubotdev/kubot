@@ -3,6 +3,8 @@ package diagnose
 import (
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/kubotdev/kubot/internal/k8s"
 	"github.com/kubotdev/kubot/internal/model"
 )
@@ -129,6 +131,14 @@ func (PodPendingRule) Run(s *k8s.Snapshot) []model.Finding {
 		if len(taints) > 0 {
 			ev["node_taints"] = taints
 		}
+		if pressured, notready := nodeHealthContext(s); len(pressured) > 0 || len(notready) > 0 {
+			if len(pressured) > 0 {
+				ev["pressured_nodes"] = pressured
+			}
+			if len(notready) > 0 {
+				ev["notready_nodes"] = notready
+			}
+		}
 		out = append(out, model.Finding{
 			Severity:  sev,
 			Resource:  fmt.Sprintf("pod/%s", pod.Name),
@@ -148,6 +158,28 @@ func reasonSuffix(r string) string {
 		return ""
 	}
 	return ": " + r
+}
+
+func nodeHealthContext(s *k8s.Snapshot) (pressured, notready []string) {
+	for _, n := range s.Nodes {
+		for _, c := range n.Status.Conditions {
+			switch c.Type {
+			case corev1.NodeMemoryPressure, corev1.NodeDiskPressure, corev1.NodePIDPressure:
+				if c.Status == corev1.ConditionTrue {
+					pressured = append(pressured, fmt.Sprintf("%s (%s)", n.Name, c.Type))
+				}
+			case corev1.NodeReady:
+				if c.Status != corev1.ConditionTrue {
+					r := string(c.Status)
+					if c.Reason != "" {
+						r = c.Reason
+					}
+					notready = append(notready, fmt.Sprintf("%s (%s)", n.Name, r))
+				}
+			}
+		}
+	}
+	return pressured, notready
 }
 
 // Cluster-wide scheduling context: cordoned nodes and distinct taint keys

@@ -330,7 +330,7 @@ to the tool.
 
 ## What it checks
 
-Thirty-one checks across pods, workloads, services, storage, nodes,
+Thirty-two checks across pods, workloads, services, storage, nodes,
 ingress, and jobs — CrashLoopBackOff (incl. backoff window), OOMKilled,
 image pulls, pending pods (with scheduler context), failing probes
 (sustained only — Ready pods stay silent), unavailable
@@ -338,7 +338,8 @@ Deployments/StatefulSets/DaemonSets, services without endpoints, missing
 or suspiciously low (under 32Mi) requests/limits, 80%+ usage (needs
 metrics-server), deployment risk aggregates, stalled rollouts, recent
 rollouts (last hour, with image change), leftover
-ReplicaSets, pending PVCs, mount failures, node pressure, three ingress
+ReplicaSets, pending PVCs, mount failures, node pressure and NotReady nodes,
+three ingress
 rules, failed Jobs, failing or suspended CronJobs, privileged or host-namespace pods,
 workloads running entirely as root, and maxed-out, dead, or blocking
 HPAs and PDBs.
