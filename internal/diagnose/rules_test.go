@@ -8,12 +8,15 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/kubotdev/kubot/internal/k8s"
 )
@@ -803,5 +806,249 @@ func TestRolloutRecent_filteredByWorkload(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("why must include the rollout note, got %+v", all)
+	}
+}
+
+func secPod(ns, name string, sc *corev1.SecurityContext, hostPID, hostNet bool) corev1.Pod {
+	return corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: corev1.PodSpec{
+			HostPID: hostPID, HostNetwork: hostNet,
+			Containers: []corev1.Container{{Name: "app", SecurityContext: sc}},
+		},
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestPodHostAccess_privileged(t *testing.T) {
+	p := secPod("default", "agent-0", &corev1.SecurityContext{Privileged: boolPtr(true)}, false, false)
+	s := &k8s.Snapshot{Pods: []corev1.Pod{p}}
+	got := (PodHostAccessRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "pod_host_access" || got[0].Severity != "warning" {
+		t.Fatalf("expected host-access warning, got %+v", got)
+	}
+}
+
+func TestPodHostAccess_hostNamespaces(t *testing.T) {
+	p := secPod("default", "agent-0", nil, true, true)
+	s := &k8s.Snapshot{Pods: []corev1.Pod{p}}
+	got := (PodHostAccessRule{}).Run(s)
+	if len(got) != 1 {
+		t.Fatalf("expected host-namespace warning, got %+v", got)
+	}
+	ev, _ := got[0].Evidence["breaks"].([]string)
+	if len(ev) != 2 {
+		t.Fatalf("must name both breaks, got %+v", got[0].Evidence)
+	}
+}
+
+func TestPodHostAccess_cleanSilent(t *testing.T) {
+	p := secPod("default", "agent-0", &corev1.SecurityContext{RunAsNonRoot: boolPtr(true)}, false, false)
+	s := &k8s.Snapshot{Pods: []corev1.Pod{p}}
+	if got := (PodHostAccessRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("clean pods stay silent, got %+v", got)
+	}
+}
+
+func rootDeployment() (appsv1.Deployment, []corev1.Pod) {
+	d := appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
+	mk := func(name string, sc *corev1.SecurityContext) corev1.Pod {
+		return corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name, Namespace: "default",
+				OwnerReferences: []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "web-7d8f9c"}},
+			},
+			Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", SecurityContext: sc}}},
+		}
+	}
+	return d, []corev1.Pod{mk("web-7d8f9c-a", nil), mk("web-7d8f9c-b", nil)}
+}
+
+func TestWorkloadRoot_allRoot(t *testing.T) {
+	d, pods := rootDeployment()
+	s := &k8s.Snapshot{Deployments: []appsv1.Deployment{d}, Pods: pods}
+	got := (WorkloadRootRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "workload_running_as_root" || got[0].Severity != "note" {
+		t.Fatalf("expected root note, got %+v", got)
+	}
+	if got[0].Resource != "deployment/web" {
+		t.Fatalf("resource must name the workload, got %q", got[0].Resource)
+	}
+}
+
+func TestWorkloadRoot_partialSilent(t *testing.T) {
+	d, pods := rootDeployment()
+	pods[1].Spec.Containers[0].SecurityContext = &corev1.SecurityContext{RunAsNonRoot: boolPtr(true)}
+	s := &k8s.Snapshot{Deployments: []appsv1.Deployment{d}, Pods: pods}
+	if got := (WorkloadRootRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("partial hardening is progress, got %+v", got)
+	}
+}
+
+func TestWorkloadRoot_podLevelOverride(t *testing.T) {
+	tru := true
+	d, pods := rootDeployment()
+	for i := range pods {
+		pods[i].Spec.SecurityContext = &corev1.PodSecurityContext{RunAsNonRoot: &tru}
+	}
+	s := &k8s.Snapshot{Deployments: []appsv1.Deployment{d}, Pods: pods}
+	if got := (WorkloadRootRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("pod-level runAsNonRoot must win, got %+v", got)
+	}
+}
+
+func TestWorkloadRoot_skipsJobsAndSystem(t *testing.T) {
+	d, pods := rootDeployment()
+	jobPod := pods[0]
+	jobPod.Name = "nightly-abc"
+	jobPod.OwnerReferences = []metav1.OwnerReference{{Kind: "Job", Name: "nightly"}}
+	sysPod := pods[1]
+	sysPod.Name = "coredns-x"
+	sysPod.Namespace = "kube-system"
+	sysPod.OwnerReferences = nil
+	s := &k8s.Snapshot{Deployments: []appsv1.Deployment{d}, Pods: []corev1.Pod{jobPod, sysPod}}
+	if got := (WorkloadRootRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("job pods and kube-system stay silent, got %+v", got)
+	}
+}
+
+func hpaFor(ns, name, target string, min, max, current, desired int32) autoscalingv1.HorizontalPodAutoscaler {
+	h := autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{Kind: "Deployment", Name: target},
+			MinReplicas:    &min,
+			MaxReplicas:    max,
+		},
+		Status: autoscalingv1.HorizontalPodAutoscalerStatus{CurrentReplicas: current, DesiredReplicas: desired},
+	}
+	return h
+}
+
+func unreadyDeploy(ns, name string) appsv1.Deployment {
+	two := int32(2)
+	return appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       appsv1.DeploymentSpec{Replicas: &two},
+		Status:     appsv1.DeploymentStatus{Replicas: 2, ReadyReplicas: 0},
+	}
+}
+
+func TestHPAAtMax_desiredBeyondMax(t *testing.T) {
+	s := &k8s.Snapshot{
+		HPAs:        []autoscalingv1.HorizontalPodAutoscaler{hpaFor("default", "web", "web", 1, 3, 3, 5)},
+		Deployments: []appsv1.Deployment{unreadyDeploy("default", "web")},
+	}
+	got := (HPAAtMaxRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "hpa_at_max" || got[0].Severity != "warning" {
+		t.Fatalf("expected maxed warning, got %+v", got)
+	}
+}
+
+func TestHPAAtMax_healthyMaxSilent(t *testing.T) {
+	one := int32(1)
+	s := &k8s.Snapshot{
+		HPAs: []autoscalingv1.HorizontalPodAutoscaler{hpaFor("default", "web", "web", 1, 3, 3, 3)},
+		Deployments: []appsv1.Deployment{{
+			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},
+			Spec:       appsv1.DeploymentSpec{Replicas: &one},
+			Status:     appsv1.DeploymentStatus{Replicas: 1, ReadyReplicas: 1},
+		}},
+	}
+	if got := (HPAAtMaxRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("maxed-but-healthy stays silent, got %+v", got)
+	}
+}
+
+func TestHPANoop_minEqualsMax(t *testing.T) {
+	s := &k8s.Snapshot{HPAs: []autoscalingv1.HorizontalPodAutoscaler{hpaFor("default", "web", "web", 2, 2, 2, 2)}}
+	got := (HPANoopRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "hpa_noop" {
+		t.Fatalf("expected noop note, got %+v", got)
+	}
+}
+
+func TestHPANoop_missingTarget(t *testing.T) {
+	s := &k8s.Snapshot{HPAs: []autoscalingv1.HorizontalPodAutoscaler{hpaFor("default", "web", "gone", 1, 3, 1, 1)}}
+	got := (HPANoopRule{}).Run(s)
+	if len(got) != 1 {
+		t.Fatalf("expected missing-target note, got %+v", got)
+	}
+}
+
+func pdbFor(ns, name string, minAvail *intstr.IntOrString, match map[string]string) policyv1.PodDisruptionBudget {
+	var sel *metav1.LabelSelector
+	if match != nil {
+		sel = &metav1.LabelSelector{MatchLabels: match}
+	}
+	return policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       policyv1.PodDisruptionBudgetSpec{MinAvailable: minAvail, Selector: sel},
+	}
+}
+
+func labeledPod(ns, name string, lbls map[string]string) corev1.Pod {
+	return corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns, Labels: lbls}}
+}
+
+func intOrStr(i int) *intstr.IntOrString {
+	v := intstr.FromInt32(int32(i))
+	return &v
+}
+
+func TestPDBBlocking_absolute(t *testing.T) {
+	s := &k8s.Snapshot{
+		PDBs: []policyv1.PodDisruptionBudget{pdbFor("default", "web", intOrStr(3), map[string]string{"app": "web"})},
+		Pods: []corev1.Pod{
+			labeledPod("default", "web-a", map[string]string{"app": "web"}),
+			labeledPod("default", "web-b", map[string]string{"app": "web"}),
+			labeledPod("default", "web-c", map[string]string{"app": "web"}),
+		},
+	}
+	got := (PDBBlockingRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "pdb_blocking" || got[0].Severity != "warning" {
+		t.Fatalf("expected blocking warning, got %+v", got)
+	}
+}
+
+func TestPDBBlocking_headroomSilent(t *testing.T) {
+	s := &k8s.Snapshot{
+		PDBs: []policyv1.PodDisruptionBudget{pdbFor("default", "web", intOrStr(2), map[string]string{"app": "web"})},
+		Pods: []corev1.Pod{
+			labeledPod("default", "web-a", map[string]string{"app": "web"}),
+			labeledPod("default", "web-b", map[string]string{"app": "web"}),
+			labeledPod("default", "web-c", map[string]string{"app": "web"}),
+		},
+	}
+	if got := (PDBBlockingRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("headroom must stay silent, got %+v", got)
+	}
+}
+
+func TestPDBNoMatch(t *testing.T) {
+	s := &k8s.Snapshot{
+		PDBs: []policyv1.PodDisruptionBudget{pdbFor("default", "web-v2", intOrStr(1), map[string]string{"app": "web-v2"})},
+		Pods: []corev1.Pod{labeledPod("default", "web-a", map[string]string{"app": "web"})},
+	}
+	got := (PDBNoMatchRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "pdb_no_match" {
+		t.Fatalf("expected no-match note, got %+v", got)
+	}
+}
+
+func TestCronJobSuspended(t *testing.T) {
+	tru := true
+	s := &k8s.Snapshot{CronJobs: []batchv1.CronJob{{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly", Namespace: "default"},
+		Spec:       batchv1.CronJobSpec{Schedule: "0 2 * * *", Suspend: &tru},
+	}}}
+	got := (CronJobSuspendedRule{}).Run(s)
+	if len(got) != 1 || got[0].Reason != "cronjob_suspended" || got[0].Severity != "warning" {
+		t.Fatalf("expected suspended warning, got %+v", got)
+	}
+	s.CronJobs[0].Spec.Suspend = nil
+	if got := (CronJobSuspendedRule{}).Run(s); len(got) != 0 {
+		t.Fatalf("running schedules stay silent, got %+v", got)
 	}
 }

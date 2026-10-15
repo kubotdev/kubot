@@ -99,3 +99,34 @@ func (CronJobFailingRule) Run(s *k8s.Snapshot) []model.Finding {
 	}
 	return out
 }
+
+// Flags paused schedules. Missed backups hide here.
+type CronJobSuspendedRule struct{}
+
+func (CronJobSuspendedRule) Name() string { return "cronjob_suspended" }
+
+func (CronJobSuspendedRule) Run(s *k8s.Snapshot) []model.Finding {
+	var out []model.Finding
+	for _, cj := range s.CronJobs {
+		if cj.Spec.Suspend == nil || !*cj.Spec.Suspend {
+			continue
+		}
+		ev := map[string]any{"schedule": cj.Spec.Schedule}
+		if cj.Status.LastScheduleTime != nil {
+			ev["last_schedule"] = cj.Status.LastScheduleTime.Time.UTC().Format("2006-01-02 15:04")
+		} else {
+			ev["last_schedule"] = "never"
+		}
+		out = append(out, model.Finding{
+			Severity:  "warning",
+			Resource:  fmt.Sprintf("cronjob/%s", cj.Name),
+			Namespace: cj.Namespace,
+			Reason:    "cronjob_suspended",
+			Message:   "CronJob is suspended — the schedule runs nothing",
+			Evidence:  ev,
+			Recommendation: "Resume it (`suspend: false`) if the pause was temporary, or delete it if the " +
+				"job is retired — a paused schedule that nobody remembers is how backups silently stop.",
+		})
+	}
+	return out
+}

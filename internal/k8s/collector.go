@@ -47,6 +47,8 @@ func Collect(ctx context.Context, cs kubernetes.Interface, namespace string, tim
 	collect("events", func() error { return collectEvents(ctx, listOpts, snap, cs, namespace) })
 	collect("pvcs", func() error { return collectPVCs(ctx, listOpts, snap, cs, namespace) })
 	collect("nodes", func() error { return collectNodes(ctx, listOpts, snap, cs, namespace) })
+	collect("hpas", func() error { return collectHPAs(ctx, listOpts, snap, cs, namespace) })
+	collect("pdbs", func() error { return collectPDBs(ctx, listOpts, snap, cs, namespace) })
 
 	if ctx.Err() == context.DeadlineExceeded {
 		snap.Degraded = append(snap.Degraded, "collection timed out; results partial")
@@ -190,5 +192,23 @@ func collectNodes(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, 
 		return err
 	}
 	snap.Nodes = res.Items
+	return nil
+}
+
+func collectHPAs(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, cs kubernetes.Interface, ns string) error {
+	res, err := cs.AutoscalingV1().HorizontalPodAutoscalers(ns).List(ctx, opts)
+	if err != nil {
+		return err
+	}
+	snap.HPAs = res.Items
+	return nil
+}
+
+func collectPDBs(ctx context.Context, opts metav1.ListOptions, snap *Snapshot, cs kubernetes.Interface, ns string) error {
+	res, err := cs.PolicyV1().PodDisruptionBudgets(ns).List(ctx, opts)
+	if err != nil {
+		return err
+	}
+	snap.PDBs = res.Items
 	return nil
 }

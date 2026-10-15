@@ -29,3 +29,10 @@ it. Finding ids are stable: `kubot inspect --json` reports them in `reason`.
 | [ingress_tls_secret_missing](ingress_tls_secret_missing.md) | warning | TLS secret doesn't exist |
 | [job_failed](job_failed.md) | warning | job failed with no successes |
 | [cronjob_failing](cronjob_failing.md) | warning | latest scheduled run failed |
+| [pod_host_access](pod_host_access.md) | warning | privileged container or host namespaces |
+| [workload_running_as_root](workload_running_as_root.md) | note | every pod runs as root |
+| [hpa_at_max](hpa_at_max.md) | warning | autoscaler maxed, still unhealthy |
+| [hpa_noop](hpa_noop.md) | note | min==max or target missing |
+| [pdb_blocking](pdb_blocking.md) | warning | zero voluntary evictions allowed |
+| [pdb_no_match](pdb_no_match.md) | note | PDB selector matches nothing |
+| [cronjob_suspended](cronjob_suspended.md) | warning | schedule paused, runs nothing |
