@@ -23,6 +23,7 @@
   <a href="#install">Install</a> ·
   <a href="#commands-and-flags">Commands</a> ·
   <a href="#ci-integration">CI</a> ·
+  <a href="#agent-skill">Skill</a> ·
   <a href="#mcp--use-kubot-as-an-agent-tool">MCP</a> ·
   <a href="#the---json-contract">JSON contract</a> ·
   <a href="#troubleshooting">Troubleshooting</a>
@@ -300,6 +301,22 @@ kubot inspect --fail-on=critical --format=sarif > kubot.sarif
 `--format=sarif` produces SARIF 2.1.0 — upload it and every finding lands
 in the repo's Security tab. `--format=junit` feeds Jenkins/GitLab test
 panes. Suppressed findings stay visible and never affect the exit code.
+
+## Agent skill
+
+kubot ships a skill that teaches coding agents the judgment layer — findings
+are facts, never write, carry caveats, prioritize by time-to-incident, parse
+`--json`:
+
+```bash
+# any Skills-aware agent (Claude Code, Cursor, Codex, …)
+curl -fsSL https://raw.githubusercontent.com/kubotdev/kubot/main/skills/install.sh | sh
+
+# or from a checkout
+cp -r skills/kubernetes-diagnostics ~/.claude/skills/
+```
+
+Details: [`skills/README.md`](skills/README.md).
 
 ## The `--json` contract
 
