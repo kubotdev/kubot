@@ -1,6 +1,5 @@
 # kubot docs
 
-- [Install](install.md) — go install, curl script, first connection
 - [Commands](commands.md) — every command, flags, and exit codes
 - [Logs](logs.md) — read-only container logs for a workload's pods
 - [History](history.md) — stored digests and `diff` ("what changed")
